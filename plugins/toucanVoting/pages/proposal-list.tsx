@@ -18,7 +18,6 @@ import { Else, If, Then } from "@/components/if";
 import { PUB_TOUCAN_VOTING_PLUGIN_ADDRESS, PUB_CHAIN } from "@/constants";
 
 import BridgeOFT, { BridgeToL1, BridgeToL2 } from "../components/bridge/BridgeOFT";
-import SponsoredMint from "../components/paymaster/SponsoredVote";
 
 const DEFAULT_PAGE_SIZE = 6;
 
