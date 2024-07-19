@@ -48,7 +48,8 @@ export const CrossChainMajorityVotingResult: React.FC<{
 
   // only add the L1 and L2 labels if the user can vote in both chains
   const l1Label = "Vote " + readableChainName(PUB_CHAIN_NAME).split(" ")[0];
-  const l2Label = "Vote " + readableChainName(PUB_L2_CHAIN_NAME).split(" ")[0] + (canUsePaymaster ? " (Free)" : "");
+  const l2LabelSuffix = isClosed ? " (Closed)" : canUsePaymaster ? " (Free)" : "";
+  const l2Label = "Vote " + readableChainName(PUB_L2_CHAIN_NAME).split(" ")[0] + l2LabelSuffix;
 
   const [showOptions, setShowOptions] = useState(false);
   const [option, setOption] = useState<string>();

@@ -24,6 +24,7 @@ import { ToucanRelayAbi } from "../artifacts/ToucanRelay.sol";
 import { Tally } from "../utils/types";
 import { GeneralPaymasterAbi } from "../artifacts/GeneralPaymaster";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/router";
 
 function handleErr(err: unknown, setError: (err: string) => void, setIsErr: (err: boolean) => void) {
   const castedErr = err as Error;
@@ -58,6 +59,7 @@ export function usePaymasterTransaction() {
   const { canUse: canUsePaymaster } = useCanUsePaymaster();
   const { switchChainAsync } = useSwitchChain();
   const queryClient = useQueryClient();
+  const { reload } = useRouter();
 
   const writeContract = useCallback(
     async (proposalRef: bigint, votingTally: Tally) => {
@@ -178,7 +180,8 @@ export function usePaymasterTransaction() {
         txHash: txHash ?? "",
         explorerLinkOverride: `https://explorer.zksync.io/tx/${txHash}`,
       });
-      queryClient.invalidateQueries();
+      // queryClient.invalidateQueries();
+      reload();
       return;
     }
 

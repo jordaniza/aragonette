@@ -22,6 +22,7 @@ import { ChainName, readableChainName } from "@/utils/chains";
 import { useProposalL1Voting, useProposalL2Voting } from "./useGetPastVotes";
 import { usePaymasterTransaction } from "../hooks/usePaymaster";
 import { useQueryClient } from "@tanstack/react-query";
+import { useGetPendingVotesOnL2 } from "./usePendingVotesRelay";
 
 export function useProposalVoting(proposalId: string) {
   const forceL1 = useForceL1Chain();
@@ -30,6 +31,7 @@ export function useProposalVoting(proposalId: string) {
   const { addAlert } = useAlerts() as AlertContextProps;
   const { proposal, status: proposalFetchStatus } = useProposal(proposalId, true);
   const votes = useCombinedVotesList(proposalId, proposal);
+  const { reload } = useRouter();
 
   const canVoteL1 = useCanVoteL1(proposalId);
   const canVoteInL2 = useCanVoteL2(proposalId);
@@ -77,9 +79,9 @@ export function useProposalVoting(proposalId: string) {
       timeout: 6 * 1000,
       txHash: votingTxHash,
     });
+    reload();
 
     queryClient.invalidateQueries();
-    // reload();
   }, [votingStatus, votingTxHash, isConfirming, isConfirmed]);
 
   const voteProposal = async (votingOption: number, chainName: ChainName) => {

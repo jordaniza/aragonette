@@ -1,4 +1,4 @@
-import { usePublicClient, useReadContract } from "wagmi";
+import { useBlockNumber, usePublicClient, useReadContract } from "wagmi";
 import { useProposalRef } from "./useProposalRef";
 import { PUB_CHAIN, PUB_L2_CHAIN, PUB_TOUCAN_RECEIVER_ADDRESS, PUB_TOUCAN_VOTING_PLUGIN_L2_ADDRESS } from "@/constants";
 import { ToucanRelayAbi } from "../artifacts/ToucanRelay.sol";
@@ -13,8 +13,9 @@ import {
 import { useEffect, useState } from "react";
 import { useProposal } from "./useProposal";
 import { useRelayVotesList } from "./useProposalVoteList";
-import { QueryKey } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ToucanReceiverAbi } from "../artifacts/ToucanReceiver.sol";
+import { useRef } from "react";
 
 export function useGetProposalVotesL2(proposalId: number) {
   const { proposalRef } = useProposalRef(proposalId);
@@ -41,6 +42,16 @@ export function useGetProposalVotesL2(proposalId: number) {
   };
 }
 
+function useRefetch() {
+  const watcher = useRef(0);
+
+  function refresh() {
+    watcher.current++;
+  }
+
+  return { refresh, watcher };
+}
+
 const VoteDispatchEvent = getAbiItem({ abi: ToucanRelayAbi, name: "VotesDispatched" });
 
 /// This doesn't work if the message doesn't make it to the receiver
@@ -50,6 +61,7 @@ export function useDispatchEvents(proposalId: string, proposal: Proposal | null)
   });
   const [dispatchLogs, setLogs] = useState<VotesDispatchedEvent[]>([]);
   const { proposalRef } = useProposalRef(Number(proposalId));
+  const { refresh, watcher } = useRefetch();
 
   async function getLogs() {
     if (!proposal?.parameters?.snapshotBlock) return;
@@ -72,19 +84,26 @@ export function useDispatchEvents(proposalId: string, proposal: Proposal | null)
 
   useEffect(() => {
     getLogs();
-  }, [proposalId]);
+  }, [proposalId, watcher.current]);
 
-  return dispatchLogs;
+  return { dispatchLogs, refresh };
 }
 
 const VotesReceivedAbiEvent = getAbiItem({ abi: ToucanReceiverAbi, name: "VotesReceived" });
 
 /// this is on the receiver, but does not guarantee votes have been submitted on the proposal
-export function useVotesReceivedEvents(proposalId: number, proposal: Proposal | null): VotesReceivedEvent[] | [] {
+export function useVotesReceivedEvents(
+  proposalId: number,
+  proposal: Proposal | null
+): {
+  votesReceived: VotesReceivedEvent[] | [];
+  refresh: () => void;
+} {
   const publicClient = usePublicClient({
     chainId: PUB_CHAIN.id,
   });
   const [votesReceived, setVotesReceived] = useState<VotesReceivedEvent[]>([]);
+  const { refresh, watcher } = useRefetch();
 
   async function getLogs() {
     if (!publicClient || !proposal) return;
@@ -106,27 +125,33 @@ export function useVotesReceivedEvents(proposalId: number, proposal: Proposal | 
 
   useEffect(() => {
     getLogs();
-  }, [proposalId, proposal?.parameters?.snapshotBlock]);
+  }, [proposalId, proposal?.parameters?.snapshotBlock, watcher.current]);
 
-  return votesReceived ?? [];
+  return { votesReceived: votesReceived ?? [], refresh };
 }
 
 export function useGetPendingVotesOnL2(proposalId: number): {
-  queries: QueryKey[];
+  refresh: () => void;
   hasPending: boolean;
   pending: { yes: bigint; no: bigint; abstain: bigint };
 } {
   const { proposal, proposalQueryKey } = useProposal(proposalId.toString(), true);
+  const queryClient = useQueryClient();
 
   // get the vote list from the relay
   const votes = useRelayVotesList(proposalId.toString(), proposal);
 
   // get the dispatch events
-  const receipts = useVotesReceivedEvents(proposalId, proposal);
+  const { votesReceived: receipts, refresh: refreshVotesReceived } = useVotesReceivedEvents(proposalId, proposal);
+
+  function refresh() {
+    refreshVotesReceived();
+    queryClient.invalidateQueries({ queryKey: proposalQueryKey });
+  }
 
   if (!proposal || !votes || !receipts) {
     return {
-      queries: [proposalQueryKey],
+      refresh,
       hasPending: false,
       pending: { yes: 0n, no: 0n, abstain: 0n },
     };
@@ -154,7 +179,7 @@ export function useGetPendingVotesOnL2(proposalId: number): {
   };
 
   return {
-    queries: [proposalQueryKey],
+    refresh,
     hasPending: pending.yes !== 0n || pending.no !== 0n || pending.abstain !== 0n,
     pending,
   };

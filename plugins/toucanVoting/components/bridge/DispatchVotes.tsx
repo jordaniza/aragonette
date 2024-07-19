@@ -1,7 +1,7 @@
 import { Button, Card, Heading, Spinner, Tooltip } from "@aragon/ods";
 import { useCanDispatch, useDispatchQuote, useDispatchVotes } from "../../hooks/useDispatchVotes";
 import { useCrossChainTransaction } from "../../hooks/useCrossChainTransactions";
-import { PUB_CHAIN, PUB_CHAIN_NAME, PUB_L2_CHAIN_NAME } from "@/constants";
+import { PUB_CHAIN_NAME, PUB_L2_CHAIN_NAME } from "@/constants";
 import { SplitRow } from "./SplitRow";
 import { formatEther } from "viem";
 import { useVotingToken } from "../../hooks/useVotingToken";
@@ -9,7 +9,6 @@ import { MessageStatus } from "@layerzerolabs/scan-client";
 import { compactNumber } from "@/utils/numbers";
 import { useGetPendingVotesOnL2 } from "../../hooks/usePendingVotesRelay";
 import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { readableChainName } from "@/utils/chains";
 
 function compactAllowNegativeNumber(value: string, decimalPlace = 2) {
@@ -22,10 +21,9 @@ function compactAllowNegativeNumber(value: string, decimalPlace = 2) {
 }
 
 export default function DispatchVotes({ id: proposalId }: { id: number }) {
-  const queryClient = useQueryClient();
   const { canDispatch } = useCanDispatch(proposalId);
   const quote = useDispatchQuote(proposalId);
-  const { pending, hasPending, queries } = useGetPendingVotesOnL2(proposalId);
+  const { pending, hasPending, refresh } = useGetPendingVotesOnL2(proposalId);
   const { symbol } = useVotingToken();
 
   const { dispatchVotes, dispatchTxHash, isConfirming, dispatchTxStatus } = useDispatchVotes(
@@ -43,10 +41,10 @@ export default function DispatchVotes({ id: proposalId }: { id: number }) {
   );
 
   useEffect(() => {
-    if (message?.status === MessageStatus.DELIVERED && Array.isArray(queries)) {
-      queries.forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
+    if (message?.status === MessageStatus.DELIVERED) {
+      refresh();
     }
-  }, [isBridged, message, queries]);
+  }, [isBridged, message]);
 
   return (
     <Card className="flex flex-col gap-5 p-4 shadow-neutral-sm">
