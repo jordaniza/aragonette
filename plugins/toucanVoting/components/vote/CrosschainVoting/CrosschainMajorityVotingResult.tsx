@@ -44,7 +44,7 @@ export const CrossChainMajorityVotingResult: React.FC<{
   const canVoteInL2 = useCanVoteL2(proposalId);
 
   const { votingScores: votingScoresL1, cta: ctaL1 } = resultL1 as IBreakdownMajorityVotingResult;
-  const { votingScores: votingScoresL2 } = resultL2 as IBreakdownMajorityVotingResult;
+  const { votingScores: votingScoresL2, cta: ctaL2 } = resultL2 as IBreakdownMajorityVotingResult;
 
   // only add the L1 and L2 labels if the user can vote in both chains
   const l1Label = "Vote " + readableChainName(PUB_CHAIN_NAME).split(" ")[0];
@@ -65,13 +65,14 @@ export const CrossChainMajorityVotingResult: React.FC<{
     }
   };
 
-  useEffect(() => {
-    if (!!ctaL1?.disabled && !!option) {
-      setShowOptions(false);
-    }
-  }, [ctaL1?.disabled, option]);
+  // useEffect(() => {
+  //   if (!!ctaL1?.disabled && !!option) {
+  //     setShowOptions(false);
+  //   }
+  // }, [ctaL1?.disabled, option]);
 
-  const disabled = (!!showOptions && !option) || ctaL1?.disabled;
+  const disabledL1 = (!!showOptions && !option) || ctaL1?.disabled;
+  const disabledL2 = (!!showOptions && !option) || ctaL2?.disabled;
 
   return (
     <div className="flex flex-col gap-y-4">
@@ -147,15 +148,15 @@ export const CrossChainMajorityVotingResult: React.FC<{
         </div>
       )}
       {/* Button group */}
-      {ctaL1 && (
+      {
         <div className="flex w-full flex-col gap-y-4 md:flex-row md:gap-x-4">
           <If condition={canVoteInL1}>
             <Button
               size="md"
               className="!rounded-full"
-              disabled={disabled}
+              disabled={disabledL1}
               onClick={() => handleVoteClick(PUB_CHAIN_NAME)}
-              isLoading={ctaL1.isLoading}
+              isLoading={ctaL1?.isLoading ?? false}
             >
               {l1Label}
             </Button>
@@ -164,9 +165,9 @@ export const CrossChainMajorityVotingResult: React.FC<{
             <Button
               size="md"
               className="!rounded-full "
-              disabled={disabled || isClosed}
+              disabled={disabledL2 || isClosed}
               onClick={() => handleVoteClick(PUB_L2_CHAIN_NAME)}
-              isLoading={ctaL1.isLoading}
+              isLoading={ctaL1?.isLoading ?? false}
             >
               {l2Label}
             </Button>
@@ -177,7 +178,7 @@ export const CrossChainMajorityVotingResult: React.FC<{
             </Button>
           )}
         </div>
-      )}
+      }
     </div>
   );
 };
