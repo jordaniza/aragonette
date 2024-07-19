@@ -73,7 +73,7 @@ export function useDispatchVotes(proposalId: number, lzSendParams: LzSendParamsD
         });
       } else {
         console.error(dispatchTxError);
-        addAlert("Could not dispatch votes", { type: "error" });
+        addAlert("Could not dispatch votes.", { type: "error" });
       }
       return;
     }
