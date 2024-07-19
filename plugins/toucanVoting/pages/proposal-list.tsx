@@ -8,8 +8,6 @@ import {
   IconType,
   IllustrationHuman,
   ProposalDataListItemSkeleton,
-  Tabs,
-  TabsList,
   type DataListState,
 } from "@aragon/ods";
 import { useCanCreateProposal } from "@/plugins/toucanVoting/hooks/useCanCreateProposal";
@@ -17,7 +15,7 @@ import Link from "next/link";
 import { Else, If, Then } from "@/components/if";
 import { PUB_TOUCAN_VOTING_PLUGIN_ADDRESS, PUB_CHAIN } from "@/constants";
 
-import BridgeOFT, { BridgeToL1, BridgeToL2 } from "../components/bridge/BridgeOFT";
+import BridgeOFT from "../components/bridge/BridgeOFT";
 
 const DEFAULT_PAGE_SIZE = 6;
 
