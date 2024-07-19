@@ -1,7 +1,9 @@
 import { If } from "@/components/if";
 import { PUB_CHAIN_NAME, PUB_L2_CHAIN_NAME } from "@/constants";
+import { useL2VotesClosedDueToDelayBuffer } from "@/plugins/toucanVoting/hooks/useDelayBuffer";
 import { useL1ProposalStage } from "@/plugins/toucanVoting/hooks/useL1ProposalStage";
 import { useL2ProposalStage } from "@/plugins/toucanVoting/hooks/useL2ProposalStage";
+import { useCanUsePaymaster } from "@/plugins/toucanVoting/hooks/usePaymaster";
 import { useCanVoteL1, useCanVoteL2 } from "@/plugins/toucanVoting/hooks/useUserCanVote";
 import { ChainName, readableChainName } from "@/utils/chains";
 import { capitalizeFirstLetter } from "@/utils/text";
@@ -32,8 +34,11 @@ const choiceTextClassNames: Record<Choices, string> = {
 export const CrossChainMajorityVotingResult: React.FC<{
   proposalId: string;
 }> = ({ proposalId }) => {
-  const { result: resultL1, voteWPaymaster } = useL1ProposalStage(proposalId);
+  const { result: resultL1 } = useL1ProposalStage(proposalId);
   const { result: resultL2 } = useL2ProposalStage(proposalId);
+  const { isClosed } = useL2VotesClosedDueToDelayBuffer(proposalId);
+
+  const { canUse: canUsePaymaster } = useCanUsePaymaster();
 
   const canVoteInL1 = useCanVoteL1(proposalId);
   const canVoteInL2 = useCanVoteL2(proposalId);
@@ -43,20 +48,17 @@ export const CrossChainMajorityVotingResult: React.FC<{
 
   // only add the L1 and L2 labels if the user can vote in both chains
   const l1Label = "Vote " + readableChainName(PUB_CHAIN_NAME).split(" ")[0];
-  const l2Label = "Vote " + readableChainName(PUB_L2_CHAIN_NAME).split(" ")[0];
+  const l2Label = "Vote " + readableChainName(PUB_L2_CHAIN_NAME).split(" ")[0] + (canUsePaymaster ? " (Free)" : "");
 
   const [showOptions, setShowOptions] = useState(false);
   const [option, setOption] = useState<string>();
-
-  console.log({ voteWPaymaster });
 
   const handleVoteClick = (chainName: ChainName) => {
     if (showOptions || votingScoresL1.length === 1) {
       const voteOption = parseInt(option ?? "0");
       const voteWrite = ctaL1?.onClick as any;
 
-      if (voteWPaymaster) voteWPaymaster();
-      else if (voteWrite) voteWrite(voteOption, chainName);
+      if (voteWrite) voteWrite(voteOption, chainName);
     } else {
       setShowOptions(true);
     }
@@ -160,8 +162,8 @@ export const CrossChainMajorityVotingResult: React.FC<{
           <If condition={canVoteInL2}>
             <Button
               size="md"
-              className="!rounded-full"
-              disabled={disabled}
+              className="!rounded-full "
+              disabled={disabled || isClosed}
               onClick={() => handleVoteClick(PUB_L2_CHAIN_NAME)}
               isLoading={ctaL1.isLoading}
             >

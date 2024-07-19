@@ -47,6 +47,7 @@ export function useApproveTokens(token: Address, chainName: ChainName) {
 
     addAlert("Token approval success", {
       description: "The transaction has been validated",
+      timeout: 6 * 1000,
       type: "success",
       txHash: approveTxHash,
     });

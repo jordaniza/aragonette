@@ -1,12 +1,10 @@
 import {
   PUB_L2_CHAIN,
-  PUB_MINTABLE_TOKEN_ADDRESS,
+  PUB_L2_CHAIN_NAME,
   PUB_PAYMASTER_ADDRESS,
   PUB_TOUCAN_VOTING_PLUGIN_L2_ADDRESS,
   PUB_WEB3_ENDPOINT_L2,
 } from "@/constants";
-import { Button, Card, Heading, Spinner } from "@aragon/ods";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -16,46 +14,16 @@ import {
   createPublicClient,
   createWalletClient,
   custom,
-  erc20Abi,
-  formatEther,
   http,
+  parseEther,
 } from "viem";
 import { eip712WalletActions, getGeneralPaymasterInput } from "viem/zksync";
-import { useAccount, useReadContract, useSwitchChain } from "wagmi";
-import { useForceL2Chain } from "../../hooks/useForceChain";
-import { MintableABI } from "../../artifacts/MintableERC20";
+import { useBalance, useReadContract, useSwitchChain } from "wagmi";
 import { AlertContextProps, useAlerts } from "@/context/Alerts";
-import { ToucanRelayAbi } from "../../artifacts/ToucanRelay.sol";
-import { Tally } from "../../utils/types";
-
-export function useMintableTokenBalance() {
-  const { address, isConnected } = useAccount();
-
-  const {
-    data: balance,
-    error,
-    isError,
-    isLoading,
-    queryKey,
-  } = useReadContract({
-    address: PUB_MINTABLE_TOKEN_ADDRESS,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: [address ?? "0x"],
-    chainId: PUB_L2_CHAIN.id,
-    query: { enabled: isConnected && !!address },
-  });
-
-  return {
-    balance,
-    status: {
-      error,
-      isLoading,
-      isError,
-    },
-    queryKey,
-  };
-}
+import { ToucanRelayAbi } from "../artifacts/ToucanRelay.sol";
+import { Tally } from "../utils/types";
+import { GeneralPaymasterAbi } from "../artifacts/GeneralPaymaster";
+import { useQueryClient } from "@tanstack/react-query";
 
 function handleErr(err: unknown, setError: (err: string) => void, setIsErr: (err: boolean) => void) {
   const castedErr = err as Error;
@@ -70,17 +38,26 @@ type ZkSyncWriteContractArgs = WriteContractParameters & {
   paymasterInput?: string;
 };
 
+/**
+ * As of now only supports the vote function of the ToucanRelay contract with general
+ * paymaster (only ETH). We also need to instantiate a separate viem client for zkSync
+ * as wagmi hooks do not support the fields requires for paymaster support.
+ * Also, this client will not work with Alchemy out the box, so we fetch the injected
+ * connector which will typically expose the eth_sendTransaction method.
+ */
 export function usePaymasterTransaction() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
-  const { addAlert } = useAlerts() as AlertContextProps;
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const timeoutSeconds = 30;
   const pollRetriesRef = useRef(0);
+  const { addAlert } = useAlerts() as AlertContextProps;
+  const { canUse: canUsePaymaster } = useCanUsePaymaster();
   const { switchChainAsync } = useSwitchChain();
+  const queryClient = useQueryClient();
 
   const writeContract = useCallback(
     async (proposalRef: bigint, votingTally: Tally) => {
@@ -91,7 +68,14 @@ export function usePaymasterTransaction() {
       setIsSubmitted(false);
 
       try {
-        const [account] = await window.ethereum?.request({ method: "eth_requestAccounts" });
+        const request = await window?.ethereum?.request({ method: "eth_requestAccounts" });
+
+        if (!request) {
+          throw new Error("Could not make request to connect wallet");
+        }
+
+        const [account] = request;
+
         if (!account) {
           throw new Error("Could not retrieve account");
         }
@@ -120,6 +104,7 @@ export function usePaymasterTransaction() {
           paymaster: PUB_PAYMASTER_ADDRESS,
           paymasterInput,
         } as ZkSyncWriteContractArgs);
+
         setTxHash(txHash);
         setIsSubmitted(true);
         pollTx(txHash);
@@ -131,6 +116,8 @@ export function usePaymasterTransaction() {
     [PUB_L2_CHAIN]
   );
 
+  // Fetch the associated tx hash and poll manually to check for success
+  // AfterTimeout, we will consider the transaction failed and show an error
   async function pollTx(txHash: `0x${string}`) {
     const intervalId = setInterval(async () => {
       try {
@@ -189,7 +176,9 @@ export function usePaymasterTransaction() {
         type: "success",
         timeout: 4 * 1000,
         txHash: txHash ?? "",
+        explorerLinkOverride: `https://explorer.zksync.io/tx/${txHash}`,
       });
+      queryClient.invalidateQueries();
       return;
     }
 
@@ -209,39 +198,76 @@ export function usePaymasterTransaction() {
     isSubmitted,
     isError,
     error,
+    canUsePaymaster,
   };
 }
 
-export default function SponsoredMint() {
-  const queryClient = useQueryClient();
-  const { address } = useAccount();
-  const { balance, queryKey } = useMintableTokenBalance();
+// Our simple paymaster just allows for a single contract
+// to be sponsored, so fetch this and you can check it matches
+// the L2 voting contract
+function useSponsoredContract() {
   const {
-    writeContract: mint,
-    isLoading: isMinting,
-    isSuccess,
+    data: address,
     isError,
-    error,
-    isSubmitted,
-  } = usePaymasterTransaction();
+    isLoading,
+  } = useReadContract({
+    address: PUB_PAYMASTER_ADDRESS,
+    chainId: PUB_L2_CHAIN.id,
+    abi: GeneralPaymasterAbi,
+    functionName: "sponsoredContract",
+    args: [],
+    query: {
+      enabled: !!PUB_PAYMASTER_ADDRESS,
+    },
+  });
 
-  const disabled = !address || isMinting;
+  return {
+    address,
+    isError,
+    isLoading,
+  };
+}
+
+export function useCanUsePaymaster() {
+  const [canUse, setCanUse] = useState(false);
+  const { data: balance, isLoading: balanceLoading } = useBalance({
+    address: PUB_PAYMASTER_ADDRESS,
+    chainId: PUB_L2_CHAIN.id,
+  });
+  const { address: sponsoredContract, isLoading: sponsorLoading } = useSponsoredContract();
 
   useEffect(() => {
-    if (isSuccess) {
-      queryClient.invalidateQueries({ queryKey });
+    // check if the paymaster is set
+    if (!PUB_PAYMASTER_ADDRESS) {
+      setCanUse(false);
+      return;
     }
-  }, [isSuccess]);
 
-  return (
-    <Card className="flex flex-col gap-y-4 p-6 shadow-neutral-md">
-      <Heading>Mint Tokens for free</Heading>
-      <p>Mint some tokens using ZkSync Paymasters!</p>
-      <p>Your Balance is {formatEther(balance ?? 0n) ?? "0"}</p>
-      {isError && <p>{error}</p>}
-      <Button disabled={disabled} onClick={mint}>
-        {isMinting ? <Spinner /> : "Mint"}
-      </Button>
-    </Card>
-  );
+    // check the network is zkSync or zkSync sepolia
+    if (!["zkSync", "zkSyncSepolia"].includes(PUB_L2_CHAIN_NAME)) {
+      setCanUse(false);
+      return;
+    }
+
+    // check the paymaster has an eth balance of 0.0005, should be enough for a few votes
+    if ((balance?.value ?? 0n) < parseEther("0.0005")) {
+      setCanUse(false);
+      return;
+    }
+
+    // check that the paymaster policies allow for the toucan relay contract
+    // NOTE: when we move away from my simple paymaster this can be more rigorous
+    // but for now we just check the sponsored contract
+    if (sponsoredContract !== PUB_TOUCAN_VOTING_PLUGIN_L2_ADDRESS) {
+      setCanUse(false);
+      return;
+    }
+
+    setCanUse(true);
+  }, [PUB_L2_CHAIN, PUB_PAYMASTER_ADDRESS, balance, sponsoredContract]);
+
+  return {
+    canUse,
+    isLoading: balanceLoading || sponsorLoading,
+  };
 }

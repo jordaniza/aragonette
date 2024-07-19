@@ -141,7 +141,7 @@ export function useCanDispatch(proposalId: number) {
     chainId: PUB_L2_CHAIN.id,
     functionName: "canDispatch",
     args: [BigInt(proposalRef ?? 0)],
-    query: { enabled: !!proposalRef },
+    query: { enabled: !!proposalRef, refetchInterval: 5000 },
   });
 
   return {

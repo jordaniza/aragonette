@@ -20,12 +20,13 @@ import { useProposalRef } from "./useProposalRef";
 import { useForceL1Chain, useForceL2Chain } from "./useForceChain";
 import { ChainName, readableChainName } from "@/utils/chains";
 import { useProposalL1Voting, useProposalL2Voting } from "./useGetPastVotes";
-import { usePaymasterTransaction } from "../components/paymaster/SponsoredVote";
+import { usePaymasterTransaction } from "../hooks/usePaymaster";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function useProposalVoting(proposalId: string) {
   const forceL1 = useForceL1Chain();
   const forceL2 = useForceL2Chain();
-  const { reload } = useRouter();
+  const queryClient = useQueryClient();
   const { addAlert } = useAlerts() as AlertContextProps;
   const { proposal, status: proposalFetchStatus } = useProposal(proposalId, true);
   const votes = useCombinedVotesList(proposalId, proposal);
@@ -41,9 +42,11 @@ export function useProposalVoting(proposalId: string) {
 
   const { proposalRef } = useProposalRef(Number(proposalId));
 
-  const { writeContract: paymaster } = usePaymasterTransaction();
+  const { writeContract: voteWithPaymaster, canUsePaymaster, isLoading: paymasterLoading } = usePaymasterTransaction();
 
   // Loading status and errors
+  // the loading status is only for non-paymaster votes, see the paymaster for the internal state
+  // and alerts
   useEffect(() => {
     if (votingStatus === "idle" || votingStatus === "pending") return;
     else if (votingStatus === "error") {
@@ -71,10 +74,12 @@ export function useProposalVoting(proposalId: string) {
     addAlert("Vote registered", {
       description: "The transaction has been validated",
       type: "success",
+      timeout: 6 * 1000,
       txHash: votingTxHash,
     });
 
-    reload();
+    queryClient.invalidateQueries();
+    // reload();
   }, [votingStatus, votingTxHash, isConfirming, isConfirmed]);
 
   const voteProposal = async (votingOption: number, chainName: ChainName) => {
@@ -96,7 +101,11 @@ export function useProposalVoting(proposalId: string) {
         addAlert("User cannot vote in " + readableChainName(PUB_L2_CHAIN_NAME), { type: "error" });
         return;
       }
-
+      // prefer to use the paymaster if available
+      if (canUsePaymaster) {
+        voteWithPaymaster(proposalRef!, votingTally);
+        return;
+      }
       forceL2(() =>
         voteWrite({
           chainId: PUB_L2_CHAIN.id,
@@ -124,10 +133,6 @@ export function useProposalVoting(proposalId: string) {
     }
   };
 
-  const voteWPaymaster = async () => {
-    return await paymaster(proposalRef!, { yes: 0n, no: parseEther("0"), abstain: parseEther("5000") });
-  };
-
   return {
     proposal,
     proposalFetchStatus,
@@ -135,8 +140,7 @@ export function useProposalVoting(proposalId: string) {
     canVote: canVoteL1,
     voteProposal,
     votingStatus,
-    isConfirming,
-    voteWPaymaster,
+    isConfirming: isConfirming || paymasterLoading,
     isConfirmed,
   };
 }

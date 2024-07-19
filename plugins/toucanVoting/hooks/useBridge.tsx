@@ -90,6 +90,7 @@ export function useBridge() {
     addAlert("Tokens sent for bridging", {
       description: "The transaction has been validated",
       type: "success",
+      timeout: 6 * 1000,
       txHash: bridgeTxHash,
     });
   }, [bridgingStatus, bridgeTxHash, isConfirming, isConfirmed]);

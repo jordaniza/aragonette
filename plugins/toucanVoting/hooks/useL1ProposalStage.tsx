@@ -7,17 +7,10 @@ import { useProposalVoting } from "./useProposalVoting";
 import { useProposalStatus } from "./useProposalVariantStatus";
 import { useProposalExecute } from "./useProposalExecute";
 
-export function useL1ProposalStage(proposalId: string): ITransformedStage {
+export function useL1ProposalStage(proposalId: string) {
   const { symbol } = useVotingToken();
   const tokenSymbol = symbol ?? "Votes";
-  const {
-    proposal,
-    canVote,
-    votes,
-    isConfirming: isConfirmingApproval,
-    voteProposal,
-    voteWPaymaster,
-  } = useProposalVoting(proposalId);
+  const { proposal, canVote, votes, isConfirming: isConfirmingApproval, voteProposal } = useProposalVoting(proposalId);
   const proposalStatus = useProposalStatus(proposal!);
   const { executeProposal, canExecute, isConfirming: isConfirmingExecution } = useProposalExecute(proposalId);
 
@@ -36,7 +29,6 @@ export function useL1ProposalStage(proposalId: string): ITransformedStage {
     proposalId,
     providerId: "1",
     result: {
-      // @ts-expect-error ignoring for now
       cta: proposal?.executed
         ? {
             disabled: true,
@@ -83,6 +75,5 @@ export function useL1ProposalStage(proposalId: string): ITransformedStage {
       options: "Yes, No, Abstain",
     },
     votes: votes && votes.map(({ voter: address }) => ({ address, variant: "approve" }) as IVote),
-    voteWPaymaster,
   };
 }
